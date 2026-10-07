@@ -1,0 +1,22 @@
+# File konfigurasi lokal
+.env
+
+# Folder dependency
+/vendor/
+/node_modules/
+
+# File sementara
+*.log
+*.tmp
+
+# File sistem Windows
+Thumbs.db
+Desktop.ini
+
+# Backup
+*.bak
+*.backup
+
+# Database lokal
+*.sqlite
+*.sqlite3
