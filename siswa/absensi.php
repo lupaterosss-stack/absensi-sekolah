@@ -19,17 +19,26 @@ $data_siswa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_siswa));
 
 $id_siswa = $data_siswa['id_siswa'] ?? 0;
 
-// Ambil Riwayat Absensi Siswa
+
+ // Ambil Riwayat Absensi Siswa
 $stmt_absensi = mysqli_prepare($koneksi, "
-    SELECT a.tanggal, a.status, m.nama_mapel 
-    FROM absensi a 
-    JOIN mapel m ON a.id_mapel = m.id_mapel 
-    WHERE a.id_siswa = ? 
-    ORDER BY a.tanggal DESC
+    SELECT
+        a.tanggal,
+        a.status,
+        a.waktu_scan,
+        a.keterangan,
+        m.nama_mapel
+    FROM absensi a
+    LEFT JOIN jadwal j ON a.id_jadwal = j.id_jadwal
+    LEFT JOIN mapel m ON j.id_mapel = m.id_mapel
+    WHERE a.id_siswa = ?
+    ORDER BY a.tanggal DESC, a.waktu_scan DESC
 ");
+
 mysqli_stmt_bind_param($stmt_absensi, "i", $id_siswa);
 mysqli_stmt_execute($stmt_absensi);
 $query_absensi = mysqli_stmt_get_result($stmt_absensi);
+
 ?>
 
 <!DOCTYPE html>

@@ -25,21 +25,32 @@ $data_siswa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_siswa));
 $id_siswa = $data_siswa['id_siswa'] ?? 0;
 $id_kelas = $data_siswa['id_kelas'] ?? 0;
 
-// Ambil Jadwal Pelajaran Berdasarkan Kelas Siswa
+
+ // Ambil Jadwal Pelajaran Berdasarkan Kelas Siswa
 $jadwal_list = [];
+
 if ($id_kelas > 0) {
     $stmt_jadwal = mysqli_prepare($koneksi, "
-        SELECT j.hari, j.jam_mulai, j.jam_selesai, m.nama_mapel, g.nama_lengkap AS nama_guru 
-        FROM jadwal_pelajaran j 
-        JOIN mapel m ON j.id_mapel = m.id_mapel 
-        JOIN guru g ON j.id_guru = g.id_guru 
-        WHERE j.id_kelas = ? 
-        ORDER BY FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'), j.jam_mulai ASC
+        SELECT
+            j.hari,
+            j.jam_mulai,
+            j.jam_selesai,
+            m.nama_mapel,
+            g.nama_guru AS nama_guru
+        FROM jadwal j
+        JOIN mapel m ON j.id_mapel = m.id_mapel
+        JOIN guru g ON j.id_guru = g.id_guru
+        WHERE j.id_kelas = ?
+        ORDER BY
+            FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'),
+            j.jam_mulai ASC
     ");
+
     mysqli_stmt_bind_param($stmt_jadwal, "i", $id_kelas);
     mysqli_stmt_execute($stmt_jadwal);
     $jadwal_list = mysqli_stmt_get_result($stmt_jadwal);
 }
+
 
 // Stats Ringkas Kehadiran
 $stat_hadir = 0; $stat_izin = 0; $stat_sakit = 0; $stat_alpa = 0;
