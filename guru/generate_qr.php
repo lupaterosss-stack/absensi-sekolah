@@ -44,7 +44,14 @@ if (!empty($selected_jadwal)) {
             $info_mapel = $j['nama_mapel'];
             // Buat token atau string data unik untuk QR code (misal: ID Jadwal + Tanggal hari ini)
             $tanggal_hari_ini = date('Y-m-d');
-            $qr_data = "ABSEN|JADWAL:{$j['id_jadwal']}|KELAS:{$j['id_kelas']}|MAPEL:{$j['id_mapel']}|TANGGAL:{$tanggal_hari_ini}";
+            $data_array = [
+                        'type'      => 'absensi',
+                        'id_jadwal' => $j['id_jadwal'],
+                        'id_kelas'  => $j['id_kelas'],
+                        'id_mapel'  => $j['id_mapel'],
+                        'tanggal'   => $tanggal_hari_ini
+                            ];
+            $qr_data = json_encode($data_array);
             break;
         }
     }

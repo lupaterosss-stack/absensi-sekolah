@@ -41,25 +41,31 @@ if (isset($_POST['tambah_massal'])) {
 
     if ($id_kelas > 0 && is_array($hari_arr)) {
         for ($i = 0; $i < count($hari_arr); $i++) {
-            $hari        = trim($hari_arr[$i]);
+            $hari        = trim($hari_arr[$i] ?? '');
             $id_mapel    = intval($mapel_arr[$i] ?? 0);
             $id_guru     = intval($guru_arr[$i] ?? 0);
             $jam_mulai   = trim($mulai_arr[$i] ?? '');
             $jam_selesai = trim($selesai_arr[$i] ?? '');
 
+            // Dilewati jika ada kolom yang tidak diisi di baris ini
             if (empty($hari) || $id_mapel <= 0 || $id_guru <= 0 || empty($jam_mulai) || empty($jam_selesai)) {
                 continue;
             }
 
+            // Standardisasi format jam (HH:MM:SS)
+            $jam_mulai_fmt   = date('H:i:s', strtotime($jam_mulai));
+            $jam_selesai_fmt = date('H:i:s', strtotime($jam_selesai));
+
             // Cek Bentrok Guru
+            // Bentrok terjadi JIKA: (Jam Mulai Baru < Jam Selesai Ada) AND (Jam Selesai Baru > Jam Mulai Ada)
             $stmt_cek_guru = mysqli_prepare($koneksi, "
                 SELECT j.*, k.nama_kelas 
                 FROM jadwal j 
                 JOIN kelas k ON j.id_kelas = k.id_kelas 
                 WHERE j.id_guru = ? AND j.hari = ? 
-                AND ((j.jam_mulai < ? AND j.jam_selesai > ?))
+                AND (? < j.jam_selesai AND ? > j.jam_mulai)
             ");
-            mysqli_stmt_bind_param($stmt_cek_guru, "isss", $id_guru, $hari, $jam_selesai, $jam_mulai);
+            mysqli_stmt_bind_param($stmt_cek_guru, "isss", $id_guru, $hari, $jam_mulai_fmt, $jam_selesai_fmt);
             mysqli_stmt_execute($stmt_cek_guru);
             $res_guru = mysqli_stmt_get_result($stmt_cek_guru);
 
@@ -67,26 +73,31 @@ if (isset($_POST['tambah_massal'])) {
             $stmt_cek_kelas = mysqli_prepare($koneksi, "
                 SELECT * FROM jadwal 
                 WHERE id_kelas = ? AND hari = ? 
-                AND ((jam_mulai < ? AND jam_selesai > ?))
+                AND (? < jam_selesai AND ? > jam_mulai)
             ");
-            mysqli_stmt_bind_param($stmt_cek_kelas, "isss", $id_kelas, $hari, $jam_selesai, $jam_mulai);
+            mysqli_stmt_bind_param($stmt_cek_kelas, "isss", $id_kelas, $hari, $jam_mulai_fmt, $jam_selesai_fmt);
             mysqli_stmt_execute($stmt_cek_kelas);
             $res_kelas = mysqli_stmt_get_result($stmt_cek_kelas);
 
             if (mysqli_num_rows($res_guru) > 0) {
                 $gagal_bentrok++;
                 $data_bentrok = mysqli_fetch_assoc($res_guru);
-                $detail_error[] = "Guru sudah mengajar di kelas " . htmlspecialchars($data_bentrok['nama_kelas']) . " ($hari $jam_mulai-$jam_selesai)";
+                $detail_error[] = "Guru sudah mengajar di kelas " . htmlspecialchars($data_bentrok['nama_kelas']) . " ($hari " . date('H:i', strtotime($data_bentrok['jam_mulai'])) . "-" . date('H:i', strtotime($data_bentrok['jam_selesai'])) . ")";
             } elseif (mysqli_num_rows($res_kelas) > 0) {
                 $gagal_bentrok++;
-                $detail_error[] = "Kelas sudah terisi jadwal lain ($hari $jam_mulai-$jam_selesai)";
+                $data_bentrok_k = mysqli_fetch_assoc($res_kelas);
+                $detail_error[] = "Kelas sudah terisi jadwal lain ($hari " . date('H:i', strtotime($data_bentrok_k['jam_mulai'])) . "-" . date('H:i', strtotime($data_bentrok_k['jam_selesai'])) . ")";
             } else {
                 $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO jadwal (id_kelas, id_mapel, id_guru, hari, jam_mulai, jam_selesai) VALUES (?, ?, ?, ?, ?, ?)");
-                mysqli_stmt_bind_param($stmt_ins, "iiisss", $id_kelas, $id_mapel, $id_guru, $hari, $jam_mulai, $jam_selesai);
+                mysqli_stmt_bind_param($stmt_ins, "iiisss", $id_kelas, $id_mapel, $id_guru, $hari, $jam_mulai_fmt, $jam_selesai_fmt);
                 if (mysqli_stmt_execute($stmt_ins)) {
                     $berhasil++;
                 }
+                mysqli_stmt_close($stmt_ins);
             }
+
+            mysqli_stmt_close($stmt_cek_guru);
+            mysqli_stmt_close($stmt_cek_kelas);
         }
 
         if ($berhasil > 0 && $gagal_bentrok == 0) {
@@ -109,6 +120,7 @@ if (isset($_GET['hapus'])) {
         $stmt_del = mysqli_prepare($koneksi, "DELETE FROM jadwal WHERE id_jadwal = ?");
         mysqli_stmt_bind_param($stmt_del, "i", $id_hapus);
         mysqli_stmt_execute($stmt_del);
+        mysqli_stmt_close($stmt_del);
         $pesan = "Jadwal berhasil dihapus.";
         $tipe_pesan = "success";
     }
@@ -132,6 +144,7 @@ if ($id_kelas_filter > 0) {
     while ($row = mysqli_fetch_assoc($res_j)) {
         $jadwal_matriks[$row['hari']][] = $row;
     }
+    mysqli_stmt_close($stmt_j);
 }
 ?>
 
@@ -256,7 +269,6 @@ if ($id_kelas_filter > 0) {
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        
                         <div class="mb-3 row align-items-center">
                             <label class="col-md-2 col-form-label fw-bold">Pilih Kelas Target:</label>
                             <div class="col-md-4">
@@ -319,7 +331,6 @@ if ($id_kelas_filter > 0) {
                                 </tbody>
                             </table>
                         </div>
-
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>

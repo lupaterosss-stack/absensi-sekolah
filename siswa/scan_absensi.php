@@ -23,17 +23,35 @@ $id_kelas = $data_siswa['id_kelas'] ?? 0;
 $pesan = "";
 $tipe_pesan = "";
 
+// Cek struktur kolom di tabel absensi untuk mencegah error
+$has_id_mapel = false;
+$check_col = mysqli_query($koneksi, "SHOW COLUMNS FROM absensi LIKE 'id_mapel'");
+if ($check_col && mysqli_num_rows($check_col) > 0) {
+    $has_id_mapel = true;
+}
+
 // Proses Absensi Saat QR Code Terbaca
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
     $qr_data = trim($_POST['qr_code']); 
-    // Format QR Code yang diharapkan: "MAPEL-{id_mapel}" (Contoh: MAPEL-1)
-    
+    $id_mapel = 0;
+
+    // Pengecekan 1: Format "MAPEL-{id_mapel}"
     if (strpos($qr_data, 'MAPEL-') === 0) {
         $id_mapel = intval(str_replace('MAPEL-', '', $qr_data));
+    } 
+    // Pengecekan 2: Format JSON
+    else {
+        $json = json_decode($qr_data, true);
+        if ($json && isset($json['id_mapel'])) {
+            $id_mapel = intval($json['id_mapel']);
+        }
+    }
+
+    if ($id_mapel > 0 && $id_siswa > 0) {
         $tanggal_hari_ini = date('Y-m-d');
 
-        if ($id_siswa > 0 && $id_mapel > 0) {
-            // Cek apakah sudah absen hari ini untuk mapel tersebut
+        if ($has_id_mapel) {
+            // Jika tabel absensi memiliki kolom id_mapel
             $stmt_cek = mysqli_prepare($koneksi, "SELECT id_absensi FROM absensi WHERE id_siswa = ? AND id_mapel = ? AND tanggal = ?");
             mysqli_stmt_bind_param($stmt_cek, "iis", $id_siswa, $id_mapel, $tanggal_hari_ini);
             mysqli_stmt_execute($stmt_cek);
@@ -43,7 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                 $pesan = "Anda sudah melakukan absensi untuk mata pelajaran ini hari ini!";
                 $tipe_pesan = "warning";
             } else {
-                // Simpan Absensi "Hadir"
                 $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO absensi (id_siswa, id_kelas, id_mapel, tanggal, status) VALUES (?, ?, ?, ?, 'Hadir')");
                 mysqli_stmt_bind_param($stmt_ins, "iiis", $id_siswa, $id_kelas, $id_mapel, $tanggal_hari_ini);
                 
@@ -54,6 +71,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                     $pesan = "Gagal mencatat absensi. Silakan coba lagi.";
                     $tipe_pesan = "danger";
                 }
+            }
+        } else {
+            // Jika tabel absensi terhubung via id_jadwal
+            // Cari id_jadwal berdasarkan id_kelas dan id_mapel
+            $stmt_jadwal = mysqli_prepare($koneksi, "SELECT id_jadwal FROM jadwal WHERE id_kelas = ? AND id_mapel = ? LIMIT 1");
+            mysqli_stmt_bind_param($stmt_jadwal, "ii", $id_kelas, $id_mapel);
+            mysqli_stmt_execute($stmt_jadwal);
+            $res_j = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_jadwal));
+            $id_jadwal = $res_j['id_jadwal'] ?? 0;
+
+            if ($id_jadwal > 0) {
+                $stmt_cek = mysqli_prepare($koneksi, "SELECT id_absensi FROM absensi WHERE id_siswa = ? AND id_jadwal = ? AND tanggal = ?");
+                mysqli_stmt_bind_param($stmt_cek, "iis", $id_siswa, $id_jadwal, $tanggal_hari_ini);
+                mysqli_stmt_execute($stmt_cek);
+                $res_cek = mysqli_stmt_get_result($stmt_cek);
+
+                if (mysqli_num_rows($res_cek) > 0) {
+                    $pesan = "Anda sudah melakukan absensi untuk mata pelajaran ini hari ini!";
+                    $tipe_pesan = "warning";
+                } else {
+                    $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO absensi (id_siswa, id_jadwal, tanggal, status) VALUES (?, ?, ?, 'Hadir')");
+                    mysqli_stmt_bind_param($stmt_ins, "iis", $id_siswa, $id_jadwal, $tanggal_hari_ini);
+                    
+                    if (mysqli_stmt_execute($stmt_ins)) {
+                        $pesan = "Berhasil! Absensi kehadiran Anda telah dicatat.";
+                        $tipe_pesan = "success";
+                    } else {
+                        $pesan = "Gagal mencatat absensi. Silakan coba lagi.";
+                        $tipe_pesan = "danger";
+                    }
+                }
+            } else {
+                $pesan = "Jadwal pelajaran tidak ditemukan untuk kelas Anda.";
+                $tipe_pesan = "danger";
             }
         }
     } else {
@@ -71,7 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
     <title>Scan Absensi QR Code - Portal Siswa</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <!-- Library QR Code Scanner -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body class="bg-light">
@@ -130,9 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function onScanSuccess(decodedText, decodedResult) {
-            // Hentikan pemindaian setelah QR terbaca
             html5QrcodeScanner.clear();
-            // Isi input dan kirim form
             document.getElementById('inputQrCode').value = decodedText;
             document.getElementById('formAbsen').submit();
         }
@@ -144,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
         let html5QrcodeScanner = new Html5QrcodeScanner(
             "reader", 
             { fps: 10, qrbox: { width: 250, height: 250 } },
-            /* verbose= */ false
+            false
         );
         html5QrcodeScanner.render(onScanSuccess, onScanFailure);
     </script>

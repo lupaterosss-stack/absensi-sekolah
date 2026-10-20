@@ -16,13 +16,13 @@ $stmt_siswa = mysqli_prepare($koneksi, "SELECT id_siswa, nisn, nama_lengkap FROM
 mysqli_stmt_bind_param($stmt_siswa, "i", $id_user);
 mysqli_stmt_execute($stmt_siswa);
 $data_siswa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_siswa));
+mysqli_stmt_close($stmt_siswa);
 
 $id_siswa = $data_siswa['id_siswa'] ?? 0;
 
-
- // Ambil Riwayat Absensi Siswa
+// Ambil Riwayat Absensi Siswa
 $stmt_absensi = mysqli_prepare($koneksi, "
-    SELECT
+    SELECT 
         a.tanggal,
         a.status,
         a.waktu_scan,
@@ -38,7 +38,6 @@ $stmt_absensi = mysqli_prepare($koneksi, "
 mysqli_stmt_bind_param($stmt_absensi, "i", $id_siswa);
 mysqli_stmt_execute($stmt_absensi);
 $query_absensi = mysqli_stmt_get_result($stmt_absensi);
-
 ?>
 
 <!DOCTYPE html>
@@ -93,17 +92,18 @@ $query_absensi = mysqli_stmt_get_result($stmt_absensi);
                                 <?php $no = 1; while ($a = mysqli_fetch_assoc($query_absensi)): ?>
                                     <tr>
                                         <td class="ps-3"><?= $no++; ?></td>
-                                        <td><?= date('d-m-Y', strtotime($a['tanggal'])); ?></td>
-                                        <td><strong><?= htmlspecialchars($a['nama_mapel']); ?></strong></td>
+                                        <td><?= !empty($a['tanggal']) ? date('d-m-Y', strtotime($a['tanggal'])) : '-'; ?></td>
+                                        <td><strong><?= htmlspecialchars($a['nama_mapel'] ?? 'Pelajaran Umum / Kegiatan'); ?></strong></td>
                                         <td class="text-center">
                                             <?php
+                                            $status = $a['status'] ?? 'Hadir';
                                             $badge_class = 'bg-secondary';
-                                            if ($a['status'] == 'Hadir') $badge_class = 'bg-success';
-                                            elseif ($a['status'] == 'Izin') $badge_class = 'bg-info text-dark';
-                                            elseif ($a['status'] == 'Sakit') $badge_class = 'bg-warning text-dark';
-                                            elseif ($a['status'] == 'Alpa') $badge_class = 'bg-danger';
+                                            if ($status == 'Hadir') $badge_class = 'bg-success';
+                                            elseif ($status == 'Izin') $badge_class = 'bg-info text-dark';
+                                            elseif ($status == 'Sakit') $badge_class = 'bg-warning text-dark';
+                                            elseif ($status == 'Alpa') $badge_class = 'bg-danger';
                                             ?>
-                                            <span class="badge <?= $badge_class; ?> fs-6"><?= htmlspecialchars($a['status']); ?></span>
+                                            <span class="badge <?= $badge_class; ?> fs-6"><?= htmlspecialchars($status); ?></span>
                                         </td>
                                     </tr>
                                 <?php endwhile; ?>

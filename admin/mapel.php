@@ -27,9 +27,18 @@ if (isset($_POST['tambah'])) {
             $pesan = "Mata pelajaran dengan nama tersebut sudah ada!";
             $tipe_pesan = "warning";
         } else {
-            // Insert Data Baru Tanpa KKM
-            $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO mapel (nama_mapel) VALUES (?)");
-            mysqli_stmt_bind_param($stmt_ins, "s", $nama_mapel);
+            // Generate kode_mapel otomatis (Contoh: Matematika -> MAT-582)
+            $clean_name = preg_replace('/[^a-zA-Z]/', '', $nama_mapel);
+            $prefix = strtoupper(substr($clean_name, 0, 3));
+            if (strlen($prefix) < 3) {
+                $prefix = str_pad($prefix, 3, 'X');
+            }
+            $kode_mapel = $prefix . '-' . rand(100, 999);
+
+            // Insert Data Baru dengan kode_mapel yang digenerate otomatis
+            $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO mapel (kode_mapel, nama_mapel) VALUES (?, ?)");
+            mysqli_stmt_bind_param($stmt_ins, "ss", $kode_mapel, $nama_mapel);
+            
             if (mysqli_stmt_execute($stmt_ins)) {
                 $pesan = "Mata pelajaran berhasil ditambahkan!";
                 $tipe_pesan = "success";
@@ -37,7 +46,9 @@ if (isset($_POST['tambah'])) {
                 $pesan = "Gagal menambahkan mata pelajaran.";
                 $tipe_pesan = "danger";
             }
+            mysqli_stmt_close($stmt_ins);
         }
+        mysqli_stmt_close($stmt_cek);
     } else {
         $pesan = "Nama mata pelajaran tidak boleh kosong!";
         $tipe_pesan = "danger";
@@ -59,6 +70,7 @@ if (isset($_POST['edit'])) {
             $pesan = "Gagal memperbarui data mata pelajaran.";
             $tipe_pesan = "danger";
         }
+        mysqli_stmt_close($stmt_upd);
     }
 }
 
@@ -75,6 +87,7 @@ if (isset($_GET['hapus'])) {
             $pesan = "Gagal menghapus mata pelajaran. Data mungkin masih terikat dengan jadwal atau nilai.";
             $tipe_pesan = "danger";
         }
+        mysqli_stmt_close($stmt_del);
     }
 }
 
@@ -140,6 +153,7 @@ $query_mapel = mysqli_query($koneksi, "SELECT * FROM mapel ORDER BY nama_mapel A
                         <thead class="table-light">
                             <tr>
                                 <th class="ps-3" style="width: 60px;">No</th>
+                                <th style="width: 150px;">Kode Mapel</th>
                                 <th>Nama Mata Pelajaran</th>
                                 <th class="text-center" style="width: 150px;">Aksi</th>
                             </tr>
@@ -149,6 +163,7 @@ $query_mapel = mysqli_query($koneksi, "SELECT * FROM mapel ORDER BY nama_mapel A
                                 <?php $no = 1; while ($m = mysqli_fetch_assoc($query_mapel)): ?>
                                     <tr>
                                         <td class="ps-3"><?= $no++; ?></td>
+                                        <td><span class="badge bg-secondary"><?= htmlspecialchars($m['kode_mapel'] ?? '-'); ?></span></td>
                                         <td class="fw-bold text-dark"><?= htmlspecialchars($m['nama_mapel']); ?></td>
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-outline-warning me-1" 
@@ -192,7 +207,7 @@ $query_mapel = mysqli_query($koneksi, "SELECT * FROM mapel ORDER BY nama_mapel A
                                 <?php endwhile; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="3" class="text-center py-4 text-muted">Belum ada data mata pelajaran.</td>
+                                    <td colspan="4" class="text-center py-4 text-muted">Belum ada data mata pelajaran.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>
