@@ -11,9 +11,9 @@ if (!isset($_SESSION['id_user']) || $_SESSION['role'] !== 'siswa') {
 
 $id_user = $_SESSION['id_user'];
 
-// Ambil Data Siswa
+// Ambil Data Siswa & Kelas
 $stmt_siswa = mysqli_prepare($koneksi, "
-    SELECT s.id_siswa, s.nisn, s.nama_lengkap, k.nama_kelas 
+    SELECT s.id_siswa, s.nisn, s.nama_lengkap, k.id_kelas, k.nama_kelas 
     FROM siswa s 
     LEFT JOIN kelas k ON s.id_kelas = k.id_kelas 
     WHERE s.id_user = ?
@@ -21,12 +21,19 @@ $stmt_siswa = mysqli_prepare($koneksi, "
 mysqli_stmt_bind_param($stmt_siswa, "i", $id_user);
 mysqli_stmt_execute($stmt_siswa);
 $data_siswa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_siswa));
+mysqli_stmt_close($stmt_siswa);
 
 $id_siswa = $data_siswa['id_siswa'] ?? 0;
 
-// Ambil Nilai Akademik Siswa
+// Ambil Nilai Akademik Siswa beserta komponen pendukung jika ada
 $stmt_nilai = mysqli_prepare($koneksi, "
-    SELECT m.nama_mapel, n.nilai_tugas, n.nilai_uts, n.nilai_uas, n.nilai_akhir 
+    SELECT 
+        m.id_mapel, 
+        m.nama_mapel, 
+        n.nilai_tugas, 
+        n.nilai_uts, 
+        n.nilai_uas, 
+        n.nilai_akhir 
     FROM nilai n 
     JOIN mapel m ON n.id_mapel = m.id_mapel 
     WHERE n.id_siswa = ? 
@@ -52,6 +59,9 @@ $query_nilai = mysqli_stmt_get_result($stmt_nilai);
     <nav class="navbar navbar-expand-lg navbar-dark bg-success shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="index.php"><i class="bi bi-person-badge me-2"></i>Portal Siswa</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navSiswa">
+                <span class="navbar-toggler-icon"></span>
+            </button>
             <div class="collapse navbar-collapse" id="navSiswa">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item"><a class="nav-link" href="index.php">Dashboard</a></li>
@@ -80,9 +90,9 @@ $query_nilai = mysqli_stmt_get_result($stmt_nilai);
                             <tr>
                                 <th class="ps-3" style="width: 50px;">No</th>
                                 <th>Mata Pelajaran</th>
-                                <th style="width: 130px;">Tugas (30%)</th>
-                                <th style="width: 130px;">UTS (30%)</th>
-                                <th style="width: 130px;">UAS (40%)</th>
+                                <th style="width: 110px;" class="text-center">Nilai Tugas</th>
+                                <th style="width: 110px;" class="text-center">Nilai UTS</th>
+                                <th style="width: 110px;" class="text-center">Nilai UAS</th>
                                 <th style="width: 130px;" class="text-center">Nilai Akhir</th>
                                 <th style="width: 100px;" class="text-center">Predikat</th>
                             </tr>
@@ -100,9 +110,9 @@ $query_nilai = mysqli_stmt_get_result($stmt_nilai);
                                     <tr>
                                         <td class="ps-3"><?= $no++; ?></td>
                                         <td><strong><?= htmlspecialchars($n['nama_mapel']); ?></strong></td>
-                                        <td><?= number_format($n['nilai_tugas'], 2); ?></td>
-                                        <td><?= number_format($n['nilai_uts'], 2); ?></td>
-                                        <td><?= number_format($n['nilai_uas'], 2); ?></td>
+                                        <td class="text-center"><?= number_format($n['nilai_tugas'], 2); ?></td>
+                                        <td class="text-center"><?= number_format($n['nilai_uts'], 2); ?></td>
+                                        <td class="text-center"><?= number_format($n['nilai_uas'], 2); ?></td>
                                         <td class="text-center fw-bold text-success">
                                             <?= number_format($n['nilai_akhir'], 2); ?>
                                         </td>
@@ -121,8 +131,15 @@ $query_nilai = mysqli_stmt_get_result($stmt_nilai);
                 </div>
             </div>
         </div>
+        
+        <div class="mt-3 text-muted small">
+            <i class="bi bi-info-circle me-1"></i> Catatan: Nilai Akhir dihitung berdasarkan akumulasi komponen penilaian (termasuk komponen kehadiran/absen sesuai kebijakan pengajar).
+        </div>
     </div>
 
+    <?php 
+    if (isset($stmt_nilai)) mysqli_stmt_close($stmt_nilai);
+    ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

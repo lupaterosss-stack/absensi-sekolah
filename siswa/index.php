@@ -11,7 +11,7 @@ if (!isset($_SESSION['id_user']) || $_SESSION['role'] !== 'siswa') {
 
 $id_user = $_SESSION['id_user'];
 
-// Ambil Detail Data Siswa & Kelas
+// 1. Ambil Detail Data Siswa & Kelas
 $stmt_siswa = mysqli_prepare($koneksi, "
     SELECT s.id_siswa, s.nisn, s.nama_lengkap, k.id_kelas, k.nama_kelas 
     FROM siswa s 
@@ -21,12 +21,12 @@ $stmt_siswa = mysqli_prepare($koneksi, "
 mysqli_stmt_bind_param($stmt_siswa, "i", $id_user);
 mysqli_stmt_execute($stmt_siswa);
 $data_siswa = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_siswa));
+mysqli_stmt_close($stmt_siswa);
 
 $id_siswa = $data_siswa['id_siswa'] ?? 0;
 $id_kelas = $data_siswa['id_kelas'] ?? 0;
 
-
- // Ambil Jadwal Pelajaran Berdasarkan Kelas Siswa
+// 2. Ambil Jadwal Pelajaran Berdasarkan Kelas Siswa
 $jadwal_list = [];
 
 if ($id_kelas > 0) {
@@ -51,23 +51,32 @@ if ($id_kelas > 0) {
     $jadwal_list = mysqli_stmt_get_result($stmt_jadwal);
 }
 
-
-// Stats Ringkas Kehadiran
+// 3. Stats Ringkas Kehadiran (Diperbaiki Menggunakan Prepared Statement demi Keamanan)
 $stat_hadir = 0; $stat_izin = 0; $stat_sakit = 0; $stat_alpa = 0;
+
 if ($id_siswa > 0) {
-    $query_stat = mysqli_query($koneksi, "
+    $stmt_stat = mysqli_prepare($koneksi, "
         SELECT status, COUNT(*) AS jumlah 
         FROM absensi 
-        WHERE id_siswa = $id_siswa 
+        WHERE id_siswa = ? 
         GROUP BY status
     ");
-    while ($r = mysqli_fetch_assoc($query_stat)) {
+    mysqli_stmt_bind_param($stmt_stat, "i", $id_siswa);
+    mysqli_stmt_execute($stmt_stat);
+    $res_stat = mysqli_stmt_get_result($stmt_stat);
+
+    while ($r = mysqli_fetch_assoc($res_stat)) {
         if ($r['status'] == 'Hadir') $stat_hadir = $r['jumlah'];
         elseif ($r['status'] == 'Izin') $stat_izin = $r['jumlah'];
         elseif ($r['status'] == 'Sakit') $stat_sakit = $r['jumlah'];
         elseif ($r['status'] == 'Alpa') $stat_alpa = $r['jumlah'];
     }
+    mysqli_stmt_close($stmt_stat);
 }
+
+// Map nama hari bahasa Indonesia untuk menandai jadwal hari ini
+$array_hari = ['Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu'];
+$hari_ini = $array_hari[date('l')] ?? '';
 ?>
 
 <!DOCTYPE html>
@@ -80,37 +89,38 @@ if ($id_siswa > 0) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 </head>
 <body class="bg-light">
-<!-- Navbar Portal Siswa -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-success shadow-sm">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="index.php"><i class="bi bi-person-badge me-2"></i>Portal Siswa</a>
-        
-        <!-- Tombol Toggler untuk Tampilan Mobile -->
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navSiswa">
-            <span class="navbar-toggler-icon"></span>
-        </button>
 
-        <div class="collapse navbar-collapse" id="navSiswa">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item">
-                    <a class="nav-link active" href="index.php">Dashboard</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="absensi.php">Rekap Absensi</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="scan_absensi.php">Scan QR Absen</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="nilai.php">Nilai & Rapor</a>
-                </li>
-            </ul>
-            <a href="../logout.php" class="btn btn-outline-light btn-sm">
-                <i class="bi bi-box-arrow-right me-1"></i>Logout
-            </a>
+    <!-- Navbar Portal Siswa -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="index.php"><i class="bi bi-person-badge me-2"></i>Portal Siswa</a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navSiswa">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navSiswa">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.php">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="absensi.php">Rekap Absensi</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="scan_absensi.php">Scan QR Absen</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="nilai.php">Nilai & Rapor</a>
+                    </li>
+                </ul>
+                <a href="../logout.php" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-box-arrow-right me-1"></i>Logout
+                </a>
+            </div>
         </div>
-    </div>
-</nav>
+    </nav>
+
     <div class="container my-4">
         <!-- Banner Selamat Datang -->
         <div class="p-4 mb-4 bg-white rounded-3 shadow-sm border-start border-4 border-success">
@@ -180,8 +190,13 @@ if ($id_siswa > 0) {
                         <tbody>
                             <?php if ($jadwal_list && mysqli_num_rows($jadwal_list) > 0): ?>
                                 <?php while ($j = mysqli_fetch_assoc($jadwal_list)): ?>
-                                    <tr>
-                                        <td class="ps-3"><span class="badge bg-secondary"><?= htmlspecialchars($j['hari']); ?></span></td>
+                                    <?php $is_today = ($j['hari'] === $hari_ini); ?>
+                                    <tr class="<?= $is_today ? 'table-success' : ''; ?>">
+                                        <td class="ps-3">
+                                            <span class="badge <?= $is_today ? 'bg-success' : 'bg-secondary'; ?>">
+                                                <?= htmlspecialchars($j['hari']); ?> <?= $is_today ? '(Hari Ini)' : ''; ?>
+                                            </span>
+                                        </td>
                                         <td><?= date('H:i', strtotime($j['jam_mulai'])); ?> - <?= date('H:i', strtotime($j['jam_selesai'])); ?></td>
                                         <td class="fw-bold text-dark"><?= htmlspecialchars($j['nama_mapel']); ?></td>
                                         <td><?= htmlspecialchars($j['nama_guru']); ?></td>

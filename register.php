@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Cek apakah username sudah terdaftar
     $cek_user = mysqli_query($koneksi, "SELECT id_user FROM users WHERE username = '$username'");
     if (mysqli_num_rows($cek_user) > 0) {
-        $pesan = "Username / NISN / NIP sudah terdaftar dalam sistem!";
+        $pesan = "Username sudah terdaftar dalam sistem!";
         $tipe_pesan = "danger";
     } else {
         // 1. Simpan ke tabel users (status_akun = 'pending')
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // 2. Simpan ke tabel relasi (guru atau siswa)
             if ($role == 'siswa') {
                 $query_detail = "INSERT INTO siswa (id_user, nisn, nama_lengkap, jenis_kelamin) 
-                                 VALUES ('$id_user_baru', '$username', '$nama_lengkap', 'L')";
+                                 VALUES ('$id_user_baru', '$username', '$nama_lengkap' , 'L')";
             } else if ($role == 'guru') {
                 $query_detail = "INSERT INTO guru (id_user, nip, nama_guru) 
                                  VALUES ('$id_user_baru', '$username', '$nama_lengkap')";

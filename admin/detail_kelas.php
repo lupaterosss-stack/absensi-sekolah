@@ -40,91 +40,35 @@ if (!$kelas) {
     exit();
 }
 
-// 3. PROSES SIMPAN SISWA BARU VIA MODAL
-if (isset($_POST['tambah_siswa'])) {
-    $nisn          = trim($_POST['nisn']);
-    $nama_lengkap  = trim($_POST['nama_lengkap']);
-    $jenis_kelamin = trim($_POST['jenis_kelamin']);
-    $username      = trim($_POST['username']);
-    $password      = trim($_POST['password']);
+// 3. PROSES MEMASUKKAN SISWA YANG SUDAH TERDAFTAR KE KELAS INI
+if (isset($_POST['tambah_siswa_kelas'])) {
+    $id_siswa = intval($_POST['id_siswa'] ?? 0);
 
-    if (!empty($nisn) && !empty($nama_lengkap) && !empty($jenis_kelamin)) {
-        // Cek apakah NISN sudah terdaftar
-        $stmt_cek = mysqli_prepare($koneksi, "SELECT id_siswa FROM siswa WHERE nisn = ?");
-        mysqli_stmt_bind_param($stmt_cek, "s", $nisn);
-        mysqli_stmt_execute($stmt_cek);
-        mysqli_stmt_store_result($stmt_cek);
+    if ($id_siswa > 0) {
+        $nama_kelas_str = $kelas['nama_kelas'];
+        
+        // Update id_kelas dan nama kelas string pada tabel siswa
+        $stmt_update = mysqli_prepare($koneksi, "UPDATE siswa SET id_kelas = ?, kelas = ? WHERE id_siswa = ?");
+        mysqli_stmt_bind_param($stmt_update, "isi", $id_kelas, $nama_kelas_str, $id_siswa);
 
-        if (mysqli_stmt_num_rows($stmt_cek) > 0) {
-            $_SESSION['pesan'] = "Gagal! NISN <strong>" . htmlspecialchars($nisn) . "</strong> sudah terdaftar.";
+        if (mysqli_stmt_execute($stmt_update)) {
+            $_SESSION['pesan'] = "Berhasil memasukkan siswa ke kelas <strong>" . htmlspecialchars($kelas['nama_kelas']) . "</strong>!";
+            $_SESSION['tipe_pesan'] = "success";
+        } else {
+            $_SESSION['pesan'] = "Gagal memasukkan siswa ke kelas: " . mysqli_error($koneksi);
             $_SESSION['tipe_pesan'] = "danger";
-            mysqli_stmt_close($stmt_cek);
-            header("Location: detail_kelas.php?id=" . $id_kelas);
-            exit();
         }
-        mysqli_stmt_close($stmt_cek);
-
-        $id_user = NULL;
-        $lanjut_simpan = true;
-
-        // Opsional: Buat akun di tabel users jika username & password diisi
-        if (!empty($username) && !empty($password)) {
-            // Cek ketersediaan username
-            $stmt_user_cek = mysqli_prepare($koneksi, "SELECT id_user FROM users WHERE username = ?");
-            mysqli_stmt_bind_param($stmt_user_cek, "s", $username);
-            mysqli_stmt_execute($stmt_user_cek);
-            mysqli_stmt_store_result($stmt_user_cek);
-
-            if (mysqli_stmt_num_rows($stmt_user_cek) > 0) {
-                $_SESSION['pesan'] = "Gagal! Username <strong>" . htmlspecialchars($username) . "</strong> sudah digunakan.";
-                $_SESSION['tipe_pesan'] = "danger";
-                $lanjut_simpan = false;
-            }
-            mysqli_stmt_close($stmt_user_cek);
-
-            if ($lanjut_simpan) {
-                $pass_hash = password_hash($password, PASSWORD_DEFAULT);
-                $role = 'siswa';
-
-                $stmt_user = mysqli_prepare($koneksi, "INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-                if ($stmt_user) {
-                    mysqli_stmt_bind_param($stmt_user, "sss", $username, $pass_hash, $role);
-                    if (mysqli_stmt_execute($stmt_user)) {
-                        $id_user = mysqli_insert_id($koneksi);
-                    }
-                    mysqli_stmt_close($stmt_user);
-                }
-            }
-        }
-
-        // Simpan ke tabel siswa jika validasi user lolos
-        if ($lanjut_simpan) {
-            $nama_kelas_str = $kelas['nama_kelas'];
-            $stmt_ins = mysqli_prepare($koneksi, "INSERT INTO siswa (id_user, nisn, nama_lengkap, kelas, id_kelas, jenis_kelamin) VALUES (?, ?, ?, ?, ?, ?)");
-            
-            // Mengatasi id_user NULL secara aman pada mysqli
-            mysqli_stmt_bind_param($stmt_ins, "isssis", $id_user, $nisn, $nama_lengkap, $nama_kelas_str, $id_kelas, $jenis_kelamin);
-
-            if (mysqli_stmt_execute($stmt_ins)) {
-                $_SESSION['pesan'] = "Berhasil menambahkan siswa <strong>" . htmlspecialchars($nama_lengkap) . "</strong> ke kelas ini!";
-                $_SESSION['tipe_pesan'] = "success";
-            } else {
-                $_SESSION['pesan'] = "Gagal menyimpan data siswa: " . mysqli_error($koneksi);
-                $_SESSION['tipe_pesan'] = "danger";
-            }
-            mysqli_stmt_close($stmt_ins);
-        }
+        mysqli_stmt_close($stmt_update);
     } else {
-        $_SESSION['pesan'] = "Lengkapi semua field yang wajib diisi.";
+        $_SESSION['pesan'] = "Silakan pilih siswa terlebih dahulu.";
         $_SESSION['tipe_pesan'] = "warning";
     }
 
-    // Redirect untuk menerapkan Post/Redirect/Get pattern
     header("Location: detail_kelas.php?id=" . $id_kelas);
     exit();
 }
 
-// 4. Ambil Daftar Siswa berdasarkan id_kelas
+// 4. Ambil Daftar Siswa yang sudah ada di kelas ini
 $query_siswa = "SELECT * FROM siswa WHERE id_kelas = ? ORDER BY nama_lengkap ASC";
 $stmt_siswa = mysqli_prepare($koneksi, $query_siswa);
 
@@ -136,6 +80,9 @@ if ($stmt_siswa) {
 }
 
 $total_siswa = $daftar_siswa ? mysqli_num_rows($daftar_siswa) : 0;
+
+// 5. Ambil Daftar Siswa yang BELUM memiliki kelas (atau bisa dipilih untuk dimasukkan)
+$query_siswa_tersedia = mysqli_query($koneksi, "SELECT id_siswa, nisn, nama_lengkap FROM siswa WHERE id_kelas IS NULL OR id_kelas = 0 ORDER BY nama_lengkap ASC");
 ?>
 
 <!DOCTYPE html>
@@ -219,10 +166,10 @@ $total_siswa = $daftar_siswa ? mysqli_num_rows($daftar_siswa) : 0;
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
-                        <span class="fw-bold"><i class="bi bi-people me-1 text-primary"></i> Daftar Siswa</span>
+                        <span class="fw-bold"><i class="bi bi-people me-1 text-primary"></i> Daftar Siswa di Kelas Ini</span>
                         <div>
                             <button type="button" class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalTambahSiswa">
-                                <i class="bi bi-person-plus me-1"></i> Tambah Siswa
+                                <i class="bi bi-person-plus me-1"></i> Tambah Siswa ke Kelas
                             </button>
                         </div>
                     </div>
@@ -275,7 +222,7 @@ $total_siswa = $daftar_siswa ? mysqli_num_rows($daftar_siswa) : 0;
         </div>
     </div>
 
-    <!-- MODAL FORM TAMBAH SISWA -->
+    <!-- MODAL PILIH SISWA YANG SUDAH TERDAFTAR -->
     <div class="modal fade" id="modalTambahSiswa" tabindex="-1" aria-labelledby="modalTambahSiswaLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -288,38 +235,26 @@ $total_siswa = $daftar_siswa ? mysqli_num_rows($daftar_siswa) : 0;
                 <form action="detail_kelas.php?id=<?= $id_kelas; ?>" method="POST">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">NISN <span class="text-danger">*</span></label>
-                            <input type="text" name="nisn" class="form-control" placeholder="Masukkan NISN siswa" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nama Lengkap <span class="text-danger">*</span></label>
-                            <input type="text" name="nama_lengkap" class="form-control" placeholder="Masukkan nama lengkap siswa" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Jenis Kelamin <span class="text-danger">*</span></label>
-                            <select name="jenis_kelamin" class="form-select" required>
-                                <option value="" selected disabled>-- Pilih Jenis Kelamin --</option>
-                                <option value="L">Laki-laki</option>
-                                <option value="P">Perempuan</option>
+                            <label class="form-label fw-semibold">Pilih Siswa <span class="text-danger">*</span></label>
+                            <select name="id_siswa" class="form-select" required>
+                                <option value="" selected disabled>-- Cari atau Pilih Siswa --</option>
+                                <?php if ($query_siswa_tersedia && mysqli_num_rows($query_siswa_tersedia) > 0): ?>
+                                    <?php while ($st = mysqli_fetch_assoc($query_siswa_tersedia)): ?>
+                                        <option value="<?= $st['id_siswa']; ?>">
+                                            <?= htmlspecialchars($st['nama_lengkap']); ?> (NISN: <?= htmlspecialchars($st['nisn']); ?>)
+                                        </option>
+                                    <?php endwhile; ?>
+                                <?php else: ?>
+                                    <option value="" disabled>Semua siswa sudah masuk ke dalam kelas.</option>
+                                <?php endif; ?>
                             </select>
-                        </div>
-
-                        <hr class="my-3">
-                        <p class="small text-muted fw-bold mb-2"><i class="bi bi-key me-1"></i> Akun Login Siswa (Opsional)</p>
-                        
-                        <div class="mb-3">
-                            <label class="form-label small">Username</label>
-                            <input type="text" name="username" class="form-control form-control-sm" placeholder="Username untuk login aplikasi">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Password</label>
-                            <input type="password" name="password" class="form-control form-control-sm" placeholder="Password akun siswa">
+                            <div class="form-text small text-muted mt-1">Menampilkan siswa yang belum dimasukkan ke kelas mana pun.</div>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                        <button type="submit" name="tambah_siswa" class="btn btn-primary fw-bold">
-                            <i class="bi bi-save me-1"></i> Simpan Data Siswa
+                        <button type="submit" name="tambah_siswa_kelas" class="btn btn-primary fw-bold">
+                            <i class="bi bi-plus-circle me-1"></i> Masukkan ke Kelas
                         </button>
                     </div>
                 </form>
